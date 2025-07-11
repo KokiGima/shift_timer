@@ -122,25 +122,29 @@
         let currentSet = 1;
         let isWorkPhase = true;
 
-        const vibrate = () => {
-          if (navigator.vibrate) {
-            navigator.vibrate([200, 100, 200]);
+        // AudioContext はユーザー操作内で生成し、以後再利用
+        let audioCtx = null;
+        const initAudio = () => {
+          if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          if (audioCtx.state === "suspended") {
+            audioCtx.resume();
           }
         };
 
         const playBeep = () => {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
+          if (!audioCtx) return; // 安全ガード
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
           osc.type = "sine";
           osc.frequency.value = 1000;
           osc.connect(gain);
-          gain.connect(ctx.destination);
+          gain.connect(audioCtx.destination);
           osc.start();
-          gain.gain.setValueAtTime(1, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
-          osc.stop(ctx.currentTime + 1);
-          vibrate();
+          gain.gain.setValueAtTime(1, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1);
+          osc.stop(audioCtx.currentTime + 1);
         };
 
         const formatTime = (secs) => {
@@ -195,6 +199,7 @@
 
         startBtn.addEventListener("click", () => {
           if (timerId) return;
+          initAudio(); // ユーザー操作内でオーディオアンロック
           remainingSeconds = getTime(workMin, workSec);
           currentSet = 1;
           isWorkPhase = true;
