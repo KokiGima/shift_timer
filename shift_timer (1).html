@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>交代アラームタイマー</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        min-height: 100vh;
+        margin: 0;
+        background: #f9fafb;
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.75rem;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 1rem;
+        width: 90%;
+        max-width: 600px;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        font-size: 0.9rem;
+      }
+      input {
+        margin-top: 0.25rem;
+        padding: 0.5rem;
+        font-size: 1rem;
+      }
+      .group {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+      .group input {
+        width: 60px;
+      }
+      button {
+        padding: 0.75rem 1.25rem;
+        font-size: 1rem;
+        border: none;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: background 0.25s;
+      }
+      button.primary {
+        background: #4f46e5;
+        color: #fff;
+      }
+      button.secondary {
+        background: #e5e7eb;
+      }
+      #display {
+        font-size: 3rem;
+        font-weight: bold;
+      }
+      #phase {
+        font-size: 1.25rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>交代アラームタイマー</h1>
+
+    <div class="controls">
+      <label>
+        作業時間
+        <div class="group">
+          <input type="number" id="work-minutes" min="0" value="25" />分
+          <input type="number" id="work-seconds" min="0" max="59" value="0" />秒
+        </div>
+      </label>
+      <label>
+        インターバル時間
+        <div class="group">
+          <input type="number" id="break-minutes" min="0" value="5" />分
+          <input type="number" id="break-seconds" min="0" max="59" value="0" />秒
+        </div>
+      </label>
+      <label>
+        セット数
+        <input type="number" id="sets" min="1" value="4" />
+      </label>
+    </div>
+
+    <div>
+      <button id="start" class="primary">開始</button>
+      <button id="stop" class="secondary" disabled>停止</button>
+      <button id="reset" class="secondary" disabled>リセット</button>
+    </div>
+
+    <div id="phase">準備完了</div>
+    <div id="display">00:00</div>
+
+    <script>
+      (() => {
+        const workMin = document.getElementById("work-minutes");
+        const workSec = document.getElementById("work-seconds");
+        const breakMin = document.getElementById("break-minutes");
+        const breakSec = document.getElementById("break-seconds");
+        const setsInput = document.getElementById("sets");
+        const startBtn = document.getElementById("start");
+        const stopBtn = document.getElementById("stop");
+        const resetBtn = document.getElementById("reset");
+        const phaseEl = document.getElementById("phase");
+        const displayEl = document.getElementById("display");
+
+        let timerId = null;
+        let remainingSeconds = 0;
+        let currentSet = 1;
+        let isWorkPhase = true;
+
+        const vibrate = () => {
+          if (navigator.vibrate) {
+            navigator.vibrate([200, 100, 200]);
+          }
+        };
+
+        const playBeep = () => {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.value = 1000;
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          gain.gain.setValueAtTime(1, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
+          osc.stop(ctx.currentTime + 1);
+          vibrate();
+        };
+
+        const formatTime = (secs) => {
+          const m = String(Math.floor(secs / 60)).padStart(2, "0");
+          const s = String(secs % 60).padStart(2, "0");
+          return `${m}:${s}`;
+        };
+
+        const updateDisplay = () => {
+          displayEl.textContent = formatTime(remainingSeconds);
+        };
+
+        const setPhaseText = () => {
+          phaseEl.textContent = isWorkPhase
+            ? `作業中: セット ${currentSet}`
+            : `休憩中: セット ${currentSet}`;
+        };
+
+        const getTime = (minInput, secInput) => {
+          const min = parseInt(minInput.value, 10) || 0;
+          const sec = parseInt(secInput.value, 10) || 0;
+          return min * 60 + sec;
+        };
+
+        const tick = () => {
+          if (remainingSeconds > 0) {
+            remainingSeconds -= 1;
+            updateDisplay();
+          } else {
+            playBeep();
+            if (isWorkPhase) {
+              isWorkPhase = false;
+              remainingSeconds = getTime(breakMin, breakSec);
+            } else {
+              if (currentSet >= parseInt(setsInput.value, 10)) {
+                clearInterval(timerId);
+                timerId = null;
+                phaseEl.textContent = "完了! お疲れさまでした";
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                resetBtn.disabled = false;
+                return;
+              }
+              currentSet += 1;
+              isWorkPhase = true;
+              remainingSeconds = getTime(workMin, workSec);
+            }
+            setPhaseText();
+            updateDisplay();
+          }
+        };
+
+        startBtn.addEventListener("click", () => {
+          if (timerId) return;
+          remainingSeconds = getTime(workMin, workSec);
+          currentSet = 1;
+          isWorkPhase = true;
+          setPhaseText();
+          updateDisplay();
+          timerId = setInterval(tick, 1000);
+          startBtn.disabled = true;
+          stopBtn.disabled = false;
+          resetBtn.disabled = true;
+        });
+
+        stopBtn.addEventListener("click", () => {
+          if (!timerId) return;
+          clearInterval(timerId);
+          timerId = null;
+          phaseEl.textContent = "一時停止";
+          startBtn.disabled = false;
+          stopBtn.disabled = true;
+          resetBtn.disabled = false;
+        });
+
+        resetBtn.addEventListener("click", () => {
+          if (timerId) return;
+          remainingSeconds = 0;
+          updateDisplay();
+          phaseEl.textContent = "リセット完了";
+          resetBtn.disabled = true;
+        });
+
+        updateDisplay();
+      })();
+    </script>
+  </body>
+</html>
