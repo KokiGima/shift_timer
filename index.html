@@ -122,19 +122,18 @@
         let currentSet = 1;
         let isWorkPhase = true;
 
-        // AudioContext はユーザー操作内で生成し、以後再利用
         let audioCtx = null;
-        const initAudio = () => {
+        const initAudio = async () => {
           if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           }
           if (audioCtx.state === "suspended") {
-            audioCtx.resume();
+            await audioCtx.resume();
           }
         };
 
         const playBeep = () => {
-          if (!audioCtx) return; // 安全ガード
+          if (!audioCtx) return;
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
           osc.type = "sine";
@@ -197,9 +196,9 @@
           }
         };
 
-        startBtn.addEventListener("click", () => {
+        startBtn.addEventListener("click", async () => {
           if (timerId) return;
-          initAudio(); // ユーザー操作内でオーディオアンロック
+          await initAudio();
           remainingSeconds = getTime(workMin, workSec);
           currentSet = 1;
           isWorkPhase = true;
